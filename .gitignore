@@ -11,3 +11,10 @@ __pycache__/
 # OS / Editor
 .DS_Store
 .vscode/
+
+chat/
+capture/notes.txt
+capture/output/*.jsonl
+
+WORKING_AGREEMENT.md
+DEFENCE.md
