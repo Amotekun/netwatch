@@ -62,11 +62,11 @@ void packet_handler(u_char *user, const struct pcap_pkthdr *header, const u_char
          << ", \"dst_ip\": \"" << inet_ntoa(ipheader->ip_dst) << "\""
          << ", \"protocol\": \"" << static_cast<int>(ipheader->ip_p) << "\"";
     if (ipheader->ip_p == IPPROTO_TCP) {
-      json << ", \"tcp_src_prt\": \"" << ntohs(tcpheader->th_sport) << "\""
-           << ", \"tcp_dst_prt\":\"" << ntohs(tcpheader->th_dport) << "\"";
+      json << ", \"src_port\": \"" << ntohs(tcpheader->th_sport) << "\""
+           << ", \"dst_port\":\"" << ntohs(tcpheader->th_dport) << "\"";
     } else if (ipheader->ip_p == IPPROTO_UDP) {
-      json << ", \"udp_src_prt\": \"" << ntohs(udpheader->uh_sport) << "\""
-           << ", \"udp_dst_prt\": \"" << ntohs(udpheader->uh_dport) << "\"";
+      json << ", \"src_port\": \"" << ntohs(udpheader->uh_sport) << "\""
+           << ", \"dst_port\": \"" << ntohs(udpheader->uh_dport) << "\"";
     }
     json << "}";
   }
