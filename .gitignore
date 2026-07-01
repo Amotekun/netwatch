@@ -17,5 +17,5 @@ capture/notes.txt
 capture/output/*.jsonl
 pipeline/db/*.db
 
-WORKING_AGREEMENT.md
-DEFENCE.md
+*.md
+!README.md
