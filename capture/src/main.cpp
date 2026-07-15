@@ -1,7 +1,7 @@
 #include <arpa/inet.h>
-#include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <librdkafka/rdkafkacpp.h>
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
 #include <netinet/udp.h>
@@ -12,7 +12,8 @@
 void packet_handler(u_char *user, const struct pcap_pkthdr *header, const u_char *packet) {
 
   std::ostringstream json;
-  std::ofstream *dump_file = reinterpret_cast<std::ofstream *>(user);
+
+  RdKafka::Producer *producer = reinterpret_cast<RdKafka::Producer *>(user);
 
   // *dump_file << "packet captured: " << header->caplen << "bytes captured, " << header->len << "bytes on wire" << std::endl;
   std::cout << "Packet captured: " << header->caplen << " bytes captured, " << header->len << " bytes on wire" << std::endl;
@@ -71,7 +72,16 @@ void packet_handler(u_char *user, const struct pcap_pkthdr *header, const u_char
     json << "}";
   }
 
-  *dump_file << json.str() << "\n";
+  std::string payload = json.str();
+  if (!payload.empty()) {
+    RdKafka::ErrorCode err = producer->produce("packets", RdKafka::Topic::PARTITION_UA, RdKafka::Producer::RK_MSG_COPY, const_cast<char *>(payload.data()), payload.size(), nullptr, 0, 0, nullptr);
+
+    if (err != RdKafka::ERR_NO_ERROR) {
+      std::cerr << "Kafka produce failed: " << RdKafka::err2str(err) << std::endl;
+    }
+
+    producer->poll(0);
+  }
 
   std::cout << std::dec << std::endl;
   std::cout << "----------------------------------------" << std::endl;
@@ -103,18 +113,33 @@ int main() {
     return 1;
   }
 
-  std::ofstream dump_file("capture/output/packets.jsonl", std::ios::app);
-  if (!dump_file.is_open()) {
-    std::cerr << "Error opening output file" << std::endl;
+  std::string errstr;
+  RdKafka::Conf *conf = RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL);
+  if (conf->set("bootstrap.servers", "localhost:9092", errstr) != RdKafka::Conf::CONF_OK) {
+    std::cerr << "Kafka config error: " << errstr << std::endl;
+    delete conf;
     pcap_close(handle);
     return 1;
   }
 
-  if (pcap_loop(handle, 10, packet_handler, reinterpret_cast<u_char *>(&dump_file))) {
-    std::cerr << "Error capturing packets: " << pcap_geterr(handle) << std::endl;
+  RdKafka::Producer *producer = RdKafka::Producer::create(conf, errstr);
+  delete conf;
+  if (producer == nullptr) {
+    std::cerr << "Kafka producer error: " << errstr << std::endl;
     pcap_close(handle);
     return 1;
   }
+
+  if (pcap_loop(handle, 10, packet_handler, reinterpret_cast<u_char *>(producer))) {
+    std::cerr << "Error capturing packets: " << pcap_geterr(handle) << std::endl;
+    producer->flush(10000);
+    delete producer;
+    pcap_close(handle);
+    return 1;
+  }
+
+  producer->flush(10000);
+  delete producer;
 
   pcap_close(handle);
 

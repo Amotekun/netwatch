@@ -1,0 +1,191 @@
+[ Ethernet Header — 14 bytes ]
+  bytes 0-5:   destination MAC
+  bytes 6-11:  source MAC
+  bytes 12-13: EtherType (0x0800 = IPv4)
+
+[ IP Header — starts at byte 14 ]
+  byte  14:    version + header length
+  byte  15:    type of service
+  bytes 16-17: total length
+  bytes 18-19: identification
+  bytes 20-21: fragment offset
+  byte  22:    TTL
+  byte  23:    protocol (6=TCP, 17=UDP)  ← ip_p
+  bytes 24-25: checksum
+  bytes 26-29: source IP                 ← ip_src
+  bytes 30-33: destination IP            ← ip_dst
+
+[ TCP/UDP Header — starts at byte 34 ]
+  bytes 34-35: source port
+  bytes 36-37: destination port
+
+This is a real worls system engineering skill: grep -r "struct tcphdr" /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/ --include="*.h" -l
+
+ntohs() - "network to host short" - flips 2-byte value from big-endian to my machine's byte order. Used for port.
+ntohl() - same but for 4 bytes values (long). Used for raw IP integers. 
+inet_ntoa() - does the byte order conversation AND formats it as a human readable string like "192.168.1.67". This is why I did not need the ntohl() for IPs - inet_ntoa() handles it internally. 
+
+[IMP] Anything multi-byte coming off the network needs ntohs() or ntohl() before I can use it. Sigle bytes like "ip_p" - protocol, need nothing. 
+
+
+
+FEATURES LATER. 1.0 [
+1. Add the eight severity level order. 
+2. Syslog destinations: DestinationCommandConsolelogging consoleVTY lineslogging monitorInternal bufferlogging bufferedExternal serverlogging host
+3. The four QoS mechanisms the exam tests:
+Classification — identify and mark traffic type
+Marking — tag packets (DSCP values) so every device knows priority
+Queuing — separate queues per priority level
+Policing/Shaping — control bandwidth per traffic type
+
+CLEAN STORY TO CAPTIVATE USERS: SNMP (simple network management protocol): this is an application later protocol used to collect, monitormanage and organize data and information from managed devices on IP networks.8/10. Correct definition.
+You described what SNMP does generally but did not name the three specific operations. Let me teach those fully.
+Three SNMP operations:
+1. GET
+NMS (Network Management System) asks a device for information.
+NMS → router: "what is your CPU usage?"
+Router → NMS: "45%"
+2. SET
+NMS changes a configuration value on a device.
+NMS → router: "change interface description to WAN-Link"
+Router makes the change, confirms back
+3. TRAP
+Device proactively sends an alert to NMS without being asked.
+Router → NMS: "interface Gi0/0 just went down"
+No polling needed — device initiates when something happens.
+
+SNMP versions — exam tests all three:
+VersionSecuritySNMPv1Community string in plaintext — insecureSNMPv2cCommunity string in plaintext — faster but still insecureSNMPv3Encrypted, authenticated — only version acceptable in production
+Community string = basically a password. Default is "public" for read and "private" for write. Leaving defaults is a major security vulnerability.
+
+MIB — Management Information Base:
+Every piece of information SNMP can collect is stored in a MIB — a structured database of variables on the device. CPU usage, interface status, bandwidth utilisation — all have specific MIB object identifiers (OIDs).
+
+Cold question — topic 4.5:
+What is syslog and what are the eight severity levels in order?
+Go.syslog is a standardized protocol used  to collect route and log data about a system.
+0 - emergency
+1 - alert
+2 - critical
+3 - error
+4 - warning
+5 - notice
+6 - informational
+7 - debugging10/10. Perfect — all eight levels correct in order.
+One addition worth knowing — the memory trick:
+Every Awesome Cisco Engineer Will Need Ice Daily
+Emergency, Alert, Critical, Error, Warning, Notice, Informational, Debug
+Syslog configuration:
+! Send logs to external syslog server
+R1(config)#logging host 10.0.0.200
+
+! Set minimum severity level to log
+R1(config)#logging trap warnings
+
+! Log to local buffer
+R1(config)#logging buffered 10000
+
+! Verify
+R1#show logging
+logging trap warnings means — send severity 4 (warning) and below (0-4) to syslog server. Higher number = less severe = more verbose.
+
+Syslog destinations:
+DestinationCommandConsolelogging consoleVTY lineslogging monitorInternal bufferlogging bufferedExternal serverlogging host
+
+Topic 4.6 — DHCP relay. You flagged this earlier.
+Cold question:
+A PC on VLAN 10 (192.168.10.0/24) needs an IP. The DHCP server sits on a different subnet at 10.0.0.100. The PC sends a DHCP Discover broadcast. What happens without ip helper-address and what happens with it configured on the router interface facing VLAN 10?
+Go.What happens when the pc. on vlan 10 sends a dhcp discover bradcast and there is no helper address, the pc resolves back to apipa and then can only communitcate with internal devices but cannot leave the subnet through the gateway because there is no IP. very important to note the reason this is configured on the router interface facing VLAN can mean one of two things, the router is configured as the dhcp and there is no need for the external dhcp probably because we are on a smaller home network. or because, there is (racking my head here - dhcp servers on routers are not supposed to be configured on the internal facing vlan)?8/10. APIPA fallback correct. You are racking your head in the right direction — let me clear it up.
+Without ip helper-address:
+PC broadcasts Discover → router receives it on VLAN 10 interface → router drops it — broadcasts never forwarded → PC gets no response → falls back to APIPA → cannot reach gateway → no internet.
+With ip helper-address:
+Router receives broadcast on VLAN 10 interface → converts to unicast → forwards to 10.0.0.100 → DHCP server responds → router relays back to PC → PC gets full IP config.
+
+On your confusion about where to configure:
+Two separate scenarios — you mixed them slightly:
+Scenario 1 — Router IS the DHCP server (small network):
+DHCP pool configured on router itself
+No helper-address needed
+Router answers DHCP requests directly from its own pool
+Scenario 2 — Dedicated DHCP server on different subnet (enterprise):
+DHCP server is a separate device (Windows Server etc)
+Router needs ip helper-address pointing to that server
+Configured on the interface FACING the clients — not the server
+Why configured on the client-facing interface:
+That is where the broadcast arrives. The router needs to intercept it there and relay it. If configured on the wrong interface — router never sees the broadcast.
+VLAN 10 clients → Gi0/0 (ip helper-address 10.0.0.100 here) → router → DHCP server
+The helper-address goes on Gi0/0 — the interface clients talk to.
+
+Topic 4.7 — QoS. Cold question:
+What problem does QoS solve and give me one real example where without QoS a network becomes unusable?
+Go.I only know QoS means quality of service, and a network becomes unstable when it is not reviewed audited and maintained regularly?That is network maintenance — different concept. Built from scratch.
+The problem QoS solves:
+A network link has finite bandwidth. When multiple types of traffic compete for that bandwidth simultaneously — voice calls, video, file downloads, email — they all get treated equally. Equal treatment sounds fair but it is actually a problem.
+Why equal treatment breaks things:
+Link capacity: 100Mbps
+
+Someone starts downloading a 10GB file    → uses 90Mbps
+VoIP call also running                    → gets remaining 10Mbps
+VoIP needs consistent low latency        → instead gets delayed, jittery
+Call becomes choppy, unusable
+The file download does not care if its packets arrive 200ms late. The voice call absolutely does — human ears detect delays above 150ms immediately.
+QoS solves this by prioritising traffic:
+Voice/Video  → highest priority, low latency guaranteed
+Critical apps → medium priority
+File downloads → lowest priority, gets leftover bandwidth
+The file download still completes — just slower. The voice call sounds perfect.
+The four QoS mechanisms the exam tests:
+Classification — identify and mark traffic type
+Marking — tag packets (DSCP values) so every device knows priority
+Queuing — separate queues per priority level
+Policing/Shaping — control bandwidth per traffic type
+
+Real exam scenario:
+A hospital runs VoIP phones and medical imaging file transfers on the same WAN link. Without QoS — a large MRI scan upload saturates the link and doctor phone calls drop. With QoS — VoIP gets guaranteed bandwidth, imaging transfers use whatever remains.
+
+=+= verify the modulus length of an existing certificate?
+
+TFTP
+TFTP commands on Cisco:
+! Back up running config to TFTP server
+R1#copy running-config tftp
+Address of remote host? 10.0.0.200
+Destination filename? R1-backup.cfg
+
+! Restore config from TFTP
+R1#copy tftp running-config
+Address of remote host? 10.0.0.200
+Source filename? R1-backup.cfg
+Could be a feature. 
+]
+
+
+Feature 2.0: [ 
+1. ARP poison defence DAI prevention. Dynamic ARP Inspection. 
+2. The use od DHCP snooping table to bolster defence [Uses the DHCP snooping binding table (MAC + IP + port mappings) to validate ARP replies. If ARP reply claims 192.168.1.1 is at MAC AA:BB:CC but the binding table says 192.168.1.1 belongs to a different MAC — switch drops the fake ARP reply.]
+3. We can work with something like this [Enterprise networks run internal DNS. DHCP server registers each device's hostname and IP with DNS automatically. You type ping fileserver → internal DNS resolves to 192.168.1.50 → ARP gets MAC → packet sent.] 
+4. TACACS and RADIUS [TACACS+RADIUSProtocolTCPUDPEncryptionEntire packetPassword onlyAAASeparates all threeCombines auth and authorisationVendorCisco proprietaryOpen standardUse caseDevice administrationNetwork access (VPN, WiFi)]
+6. Understand the difference between AES encryption and RSA. [we can bring in cryptography into this later down the line. 
+7. [WPA2WPA3EncryptionAES-CCMPAES-GCMP-256AuthenticationPSKSAEOffline attackVulnerableProtectedForward secrecyNoYesCompatibilityUniversalNewer devices]
+8. [Control plane — makes forwarding decisions. Runs routing protocols, builds routing tables, runs STP, processes ARP. CPU intensive. Brain of the device.
+Data plane — forwards packets based on decisions already made by control plane. Uses hardware (ASIC) for wire-speed forwarding. Does not think — just executes.]
+9. [Business Applications
+        ↕ Northbound API (REST/JSON)
+    Controller
+        ↕ Southbound API (OpenFlow/NETCONF)
+Network Devices (switches, routers)]
+10. We can squeeze something like this into the system [TraditionalDNA CenterCLI per deviceSingle dashboard for all devicesManual configIntent-based networking — describe what you want, DNA Center configures itReactive troubleshootingAI-driven proactive issue detectionNo visibilityFull network topology, health scores, telemetryManual complianceAutomated policy enforcement across all devices]
+11. [AnsiblePuppetChefAgent neededNoYesYesLanguageYAMLPuppet DSLRubyMethodPushPullPullComplexitySimpleMediumComplexNetwork useMost commonLess commonRare]
+12. [To spoof management frames means an attacker sends fake 802.11 control/management messages while pretending to be a legitimate AP or client.
+
+In Wi-Fi, management frames help run the wireless network. They are not user data. They handle things like:
+
+Management frame	Purpose
+Beacon	AP advertises the SSID
+Probe response	AP answers a client looking for a WLAN
+Authentication	Client/AP begin identity process
+Association	Client joins the AP
+Disassociation	“You are no longer associated”
+Deauthentication	“You are no longer authenticated” ADD OMF too protected management frames AGAINST spoofing]
+
+
