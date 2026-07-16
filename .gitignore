@@ -16,6 +16,7 @@ chat/
 capture/notes.txt
 capture/output/*.jsonl
 pipeline/db/*.db
+*.txt
 
 *.md
 !README.md
