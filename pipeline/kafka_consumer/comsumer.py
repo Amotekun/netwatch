@@ -8,13 +8,13 @@ conn = sqlite3.connect(sqlite_db_path)
 cursor = conn.cursor()
 
 conf = {
-    "bootstrap.servers": "localhost:9092",  # same broker C++ publishes to
-    "group.id": "netwatch-ingest",  # consumer group name — Kafka tracks offset per group
-    "auto.offset.reset": "earliest",  # if no committed offset exists, start from the beginning
+    "bootstrap.servers": "localhost:9092",
+    "group.id": "netwatch-ingest",
+    "auto.offset.reset": "earliest",
 }
 consumer = Consumer(conf)
 
-consumer.subscribe(["packets"])  # same topic C++ publishes to
+consumer.subscribe(["packets"])
 
 try:
     while True:
